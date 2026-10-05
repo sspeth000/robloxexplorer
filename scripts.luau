@@ -22,18 +22,31 @@ end
 function scripts.GetSource(object)
 
     if not scripts.IsScript(object) then
-        return nil
+        return "-- This object is not a script."
     end
 
-    local success, source = pcall(function()
+    local success, result = pcall(function()
         return object.Source
     end)
 
-    if success and type(source) == "string" then
-        return source
+    if not success then
+        return "-- Failed to read script source:\n\n" .. tostring(result)
     end
 
-    return "-- Unable to read script source."
+    if result == nil then
+        return "-- Script source is nil."
+    end
+
+    if type(result) ~= "string" then
+        return "-- Script source returned an unexpected value:\n\n"
+            .. tostring(result)
+    end
+
+    if result == "" then
+        return "-- This script is empty."
+    end
+
+    return result
 
 end
 
