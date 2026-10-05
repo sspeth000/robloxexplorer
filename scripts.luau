@@ -1,30 +1,40 @@
 -- scripts.luau
--- Finds script objects in the game.
+-- Handles script detection and source retrieval.
 
 local scripts = {}
 
-local function scan(object)
+--------------------------------------------------
+-- CHECK IF OBJECT IS A SCRIPT
+--------------------------------------------------
 
-    for _, child in ipairs(object:GetChildren()) do
+function scripts.IsScript(object)
 
-        if child:IsA("Script")
-            or child:IsA("LocalScript")
-            or child:IsA("ModuleScript") then
-
-            table.insert(scripts, {
-                Object = child,
-                Name = child.Name,
-                ClassName = child.ClassName
-            })
-
-        end
-
-        scan(child)
-
-    end
+    return object:IsA("Script")
+        or object:IsA("LocalScript")
+        or object:IsA("ModuleScript")
 
 end
 
-scan(game)
+--------------------------------------------------
+-- GET SCRIPT SOURCE
+--------------------------------------------------
+
+function scripts.GetSource(object)
+
+    if not scripts.IsScript(object) then
+        return nil
+    end
+
+    local success, source = pcall(function()
+        return object.Source
+    end)
+
+    if success and type(source) == "string" then
+        return source
+    end
+
+    return "-- Unable to read script source."
+
+end
 
 return scripts
