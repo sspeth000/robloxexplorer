@@ -1,3 +1,5 @@
+local scripts = ...
+
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 
@@ -80,16 +82,19 @@ padding.Parent = explorer
 -- VIEWER
 --------------------------------------------------
 
-local viewer = Instance.new("Frame")
+local viewer = Instance.new("ScrollingFrame")
 viewer.Size = UDim2.new(1, -300, 1, -32)
 viewer.Position = UDim2.fromOffset(300, 32)
 viewer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 viewer.BorderSizePixel = 0
+viewer.ScrollBarThickness = 6
+viewer.CanvasSize = UDim2.new(0, 0, 0, 0)
 viewer.Parent = window
 
 local viewerText = Instance.new("TextLabel")
-viewerText.Size = UDim2.new(1, -20, 1, -20)
+viewerText.Size = UDim2.new(1, -20, 0, 0)
 viewerText.Position = UDim2.fromOffset(10, 10)
+viewerText.AutomaticSize = Enum.AutomaticSize.Y
 viewerText.BackgroundTransparency = 1
 viewerText.Text = "-- Select an object"
 viewerText.TextColor3 = Color3.fromRGB(210, 210, 210)
@@ -97,6 +102,7 @@ viewerText.TextSize = 14
 viewerText.Font = Enum.Font.Code
 viewerText.TextXAlignment = Enum.TextXAlignment.Left
 viewerText.TextYAlignment = Enum.TextYAlignment.Top
+viewerText.TextWrapped = false
 viewerText.Parent = viewer
 
 --------------------------------------------------
@@ -253,13 +259,41 @@ createNode = function(object, depth, parents)
     row.MouseButton1Click:Connect(function()
 
         --------------------------------------------------
-        -- OBJECT INFO
+        -- SCRIPT SOURCE
         --------------------------------------------------
 
-        viewerText.Text =
-            "Name: " .. object.Name ..
-            "\nClass: " .. object.ClassName ..
-            "\nChildren: " .. tostring(#object:GetChildren())
+        if scripts and scripts.IsScript and scripts.IsScript(object) then
+
+            local source = scripts.GetSource(object)
+
+            viewerText.Text =
+                source or "-- Unable to read script source."
+
+        --------------------------------------------------
+        -- NORMAL OBJECT INFO
+        --------------------------------------------------
+
+        else
+
+            viewerText.Text =
+                "Name: " .. object.Name ..
+                "\nClass: " .. object.ClassName ..
+                "\nChildren: " .. tostring(#object:GetChildren())
+
+        end
+
+        --------------------------------------------------
+        -- UPDATE VIEWER SIZE
+        --------------------------------------------------
+
+        task.wait()
+
+        viewer.CanvasSize = UDim2.new(
+            0,
+            0,
+            0,
+            viewerText.AbsoluteSize.Y + 20
+        )
 
         --------------------------------------------------
         -- TOGGLE TREE
@@ -364,10 +398,10 @@ UserInputService.InputChanged:Connect(function(input)
         local delta = input.Position - dragStart
 
         window.Position = UDim2.new(
-            startPosition.X.Scale,
+            startPosition.X,
             startPosition.X.Offset + delta.X,
 
-            startPosition.Y.Scale,
+            startPosition.Y,
             startPosition.Y.Offset + delta.Y
         )
 
