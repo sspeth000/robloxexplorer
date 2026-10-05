@@ -64,7 +64,7 @@ explorer.Position = UDim2.fromOffset(0, 32)
 explorer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 explorer.BorderSizePixel = 0
 explorer.ScrollBarThickness = 6
-explorer.CanvasSize = UDim2.new(0, 0, 0, 0)
+explorer.CanvasSize = UDim2.fromOffset(0, 0)
 explorer.Parent = window
 
 local layout = Instance.new("UIListLayout")
@@ -79,7 +79,7 @@ padding.PaddingRight = UDim.new(0, 5)
 padding.Parent = explorer
 
 --------------------------------------------------
--- VIEWER
+-- CODE VIEWER
 --------------------------------------------------
 
 local viewer = Instance.new("ScrollingFrame")
@@ -88,22 +88,49 @@ viewer.Position = UDim2.fromOffset(300, 32)
 viewer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 viewer.BorderSizePixel = 0
 viewer.ScrollBarThickness = 6
-viewer.CanvasSize = UDim2.new(0, 0, 0, 0)
+viewer.CanvasSize = UDim2.fromOffset(0, 0)
 viewer.Parent = window
 
-local viewerText = Instance.new("TextLabel")
+local viewerText = Instance.new("TextBox")
+
 viewerText.Size = UDim2.new(1, -20, 0, 0)
 viewerText.Position = UDim2.fromOffset(10, 10)
 viewerText.AutomaticSize = Enum.AutomaticSize.Y
+
 viewerText.BackgroundTransparency = 1
+
 viewerText.Text = "-- Select an object"
+
 viewerText.TextColor3 = Color3.fromRGB(210, 210, 210)
 viewerText.TextSize = 14
 viewerText.Font = Enum.Font.Code
+
 viewerText.TextXAlignment = Enum.TextXAlignment.Left
 viewerText.TextYAlignment = Enum.TextYAlignment.Top
+
 viewerText.TextWrapped = false
+
+viewerText.ClearTextOnFocus = false
+viewerText.MultiLine = true
+
 viewerText.Parent = viewer
+
+--------------------------------------------------
+-- UPDATE VIEWER SIZE
+--------------------------------------------------
+
+local function updateViewer()
+
+    task.wait()
+
+    viewer.CanvasSize = UDim2.new(
+        0,
+        0,
+        0,
+        viewerText.AbsoluteSize.Y + 20
+    )
+
+end
 
 --------------------------------------------------
 -- TREE DATA
@@ -262,15 +289,23 @@ createNode = function(object, depth, parents)
         -- SCRIPT SOURCE
         --------------------------------------------------
 
-        if scripts and scripts.IsScript and scripts.IsScript(object) then
+        if scripts
+            and scripts.IsScript
+            and scripts.IsScript(object) then
 
             local source = scripts.GetSource(object)
 
-            viewerText.Text =
-                source or "-- Unable to read script source."
+            viewerText.Text = source
+
+            print(
+                "Loaded script:",
+                object:GetFullName(),
+                "Characters:",
+                #source
+            )
 
         --------------------------------------------------
-        -- NORMAL OBJECT INFO
+        -- NORMAL OBJECT
         --------------------------------------------------
 
         else
@@ -283,17 +318,10 @@ createNode = function(object, depth, parents)
         end
 
         --------------------------------------------------
-        -- UPDATE VIEWER SIZE
+        -- UPDATE VIEWER
         --------------------------------------------------
 
-        task.wait()
-
-        viewer.CanvasSize = UDim2.new(
-            0,
-            0,
-            0,
-            viewerText.AbsoluteSize.Y + 20
-        )
+        updateViewer()
 
         --------------------------------------------------
         -- TOGGLE TREE
@@ -393,15 +421,16 @@ end)
 
 UserInputService.InputChanged:Connect(function(input)
 
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+    if dragging
+        and input.UserInputType == Enum.UserInputType.MouseMovement then
 
         local delta = input.Position - dragStart
 
         window.Position = UDim2.new(
-            startPosition.X,
+            startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
 
-            startPosition.Y,
+            startPosition.Y.Scale,
             startPosition.Y.Offset + delta.Y
         )
 
