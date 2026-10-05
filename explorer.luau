@@ -1,22 +1,18 @@
--- explorer.luau
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
-local objectData = ...
-
-if not objectData then
-    warn("Explorer: no object data received")
-    return
+-- Remove old Explorer if it exists
+local oldGui = CoreGui:FindFirstChild("Explorer")
+if oldGui then
+    oldGui:Destroy()
 end
 
-local CoreGui = game:GetService("CoreGui")
-
---------------------------------------------------
 -- GUI
---------------------------------------------------
-
 local gui = Instance.new("ScreenGui")
 gui.Name = "Explorer"
 gui.Parent = CoreGui
 
+-- Main window
 local window = Instance.new("Frame")
 window.Size = UDim2.fromOffset(700, 450)
 window.Position = UDim2.fromOffset(100, 100)
@@ -25,111 +21,139 @@ window.BorderSizePixel = 1
 window.BorderColor3 = Color3.fromRGB(80, 80, 80)
 window.Parent = gui
 
+-- Title bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 32)
+titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = window
+
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 32)
-title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-title.BorderSizePixel = 0
-title.Text = "  Explorer"
+title.Size = UDim2.new(1, -10, 1, 0)
+title.Position = UDim2.fromOffset(10, 0)
+title.BackgroundTransparency = 1
+title.Text = "Workspace Explorer"
 title.TextColor3 = Color3.fromRGB(235, 235, 235)
 title.TextSize = 16
 title.Font = Enum.Font.SourceSans
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = window
+title.Parent = titleBar
 
---------------------------------------------------
--- OBJECT LIST
---------------------------------------------------
+-- Explorer panel
+local explorer = Instance.new("ScrollingFrame")
+explorer.Size = UDim2.new(0, 300, 1, -32)
+explorer.Position = UDim2.fromOffset(0, 32)
+explorer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+explorer.BorderSizePixel = 0
+explorer.ScrollBarThickness = 6
+explorer.CanvasSize = UDim2.new(0, 0, 0, 0)
+explorer.Parent = window
 
-local list = Instance.new("ScrollingFrame")
-list.Name = "ObjectList"
-list.Size = UDim2.new(0, 300, 1, -32)
-list.Position = UDim2.fromOffset(0, 32)
-list.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-list.BorderSizePixel = 0
-list.ScrollBarThickness = 6
-list.CanvasSize = UDim2.new(0, 0, 0, 0)
-list.Parent = window
+-- Script viewer
+local viewer = Instance.new("Frame")
+viewer.Size = UDim2.new(1, -300, 1, -32)
+viewer.Position = UDim2.fromOffset(300, 32)
+viewer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+viewer.BorderSizePixel = 0
+viewer.Parent = window
 
+local viewerText = Instance.new("TextLabel")
+viewerText.Size = UDim2.new(1, -20, 1, -20)
+viewerText.Position = UDim2.fromOffset(10, 10)
+viewerText.BackgroundTransparency = 1
+viewerText.Text = "-- Select an object"
+viewerText.TextColor3 = Color3.fromRGB(210, 210, 210)
+viewerText.TextSize = 14
+viewerText.Font = Enum.Font.Code
+viewerText.TextXAlignment = Enum.TextXAlignment.Left
+viewerText.TextYAlignment = Enum.TextYAlignment.Top
+viewerText.Parent = viewer
+
+-- Layout
 local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 2)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 1)
-layout.Parent = list
+layout.Parent = explorer
 
---------------------------------------------------
--- RENDER OBJECT
---------------------------------------------------
+-- Padding
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 5)
+padding.PaddingLeft = UDim.new(0, 5)
+padding.PaddingRight = UDim.new(0, 5)
+padding.Parent = explorer
+
+-- Render workspace
+local objects = workspace:GetChildren()
+
+print("Workspace children:", #objects)
 
 local rowCount = 0
 
-local function renderObject(object, depth)
-
+for _, object in ipairs(objects) do
     rowCount += 1
 
     local row = Instance.new("TextButton")
 
-    row.Name = "Object_" .. rowCount
-    row.Size = UDim2.new(1, -6, 0, 24)
-    row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, -10, 0, 28)
+    row.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     row.BorderSizePixel = 0
-    row.AutoButtonColor = true
-    row.Text = ""
+
+    row.Text = "  " .. object.Name .. " [" .. object.ClassName .. "]"
+    row.TextColor3 = Color3.fromRGB(230, 230, 230)
+    row.TextSize = 14
+    row.Font = Enum.Font.SourceSans
+    row.TextXAlignment = Enum.TextXAlignment.Left
+
     row.LayoutOrder = rowCount
-    row.Parent = list
+    row.Parent = explorer
 
-    local text = Instance.new("TextLabel")
-
-    text.Size = UDim2.new(1, -8, 1, 0)
-    text.Position = UDim2.fromOffset(8 + depth * 18, 0)
-    text.BackgroundTransparency = 1
-    text.TextColor3 = Color3.fromRGB(220, 220, 220)
-    text.TextSize = 14
-    text.Font = Enum.Font.SourceSans
-    text.TextXAlignment = Enum.TextXAlignment.Left
-
-    -- Simple Roblox-style tree indicator.
-    if object.Children and #object.Children > 0 then
-        text.Text = "▼  " .. object.Name
-    else
-        text.Text = "    " .. object.Name
-    end
-
-    text.Parent = row
-
-    -- Temporary debugging:
     row.MouseButton1Click:Connect(function()
-        print(
-            "Selected:",
-            object.Name,
-            "(" .. tostring(object.ClassName) .. ")"
-        )
+        viewerText.Text =
+            "Name: " .. object.Name ..
+            "\nClass: " .. object.ClassName ..
+            "\n\nChildren: " .. tostring(#object:GetChildren())
     end)
-
-    -- Render children.
-    if object.Children then
-        for _, child in ipairs(object.Children) do
-            renderObject(child, depth + 1)
-        end
-    end
 end
 
---------------------------------------------------
--- ROOT
---------------------------------------------------
+-- Give the ScrollingFrame enough space
+explorer.CanvasSize = UDim2.new(
+    0,
+    0,
+    0,
+    rowCount * 30 + 10
+)
 
-print("Explorer received:", objectData.Name)
-print("Class:", objectData.ClassName)
-print("Children:", #objectData.Children)
+-- Dragging
+local dragging = false
+local dragStart
+local startPosition
 
--- Render Workspace itself.
-renderObject(objectData, 0)
-
---------------------------------------------------
--- SCROLL SIZE
---------------------------------------------------
-
-task.defer(function()
-    list.CanvasSize = UDim2.fromOffset(
-        0,
-        layout.AbsoluteContentSize.Y + 10
-    )
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPosition = window.Position
+    end
 end)
+
+titleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+
+        window.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+print("Explorer loaded successfully.")
+print("Rendered rows:", rowCount)
