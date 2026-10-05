@@ -1,441 +1,493 @@
-local scripts = ...
-
-local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local playerGui = player:WaitForChild("PlayerGui")
+
 --------------------------------------------------
--- REMOVE OLD EXPLORER
+-- CLEANUP OLD INSPECTOR
 --------------------------------------------------
 
-local oldGui = CoreGui:FindFirstChild("Explorer")
-
+local oldGui = playerGui:FindFirstChild("ObjectPathInspector")
 if oldGui then
-    oldGui:Destroy()
+	oldGui:Destroy()
 end
+
+local oldHighlight = workspace:FindFirstChild("InspectorHighlight")
+if oldHighlight then
+	oldHighlight:Destroy()
+end
+
+local oldMarker = workspace:FindFirstChild("InspectorTransparentMarker")
+if oldMarker then
+	oldMarker:Destroy()
+end
+
+--------------------------------------------------
+-- STATE
+--------------------------------------------------
+
+local inspecting = true
+local selectedObject = nil
+local highlightEnabled = true
 
 --------------------------------------------------
 -- GUI
 --------------------------------------------------
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "Explorer"
-gui.Parent = CoreGui
+gui.Name = "ObjectPathInspector"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
 
 --------------------------------------------------
--- WINDOW
+-- PANEL
 --------------------------------------------------
 
-local window = Instance.new("Frame")
-window.Size = UDim2.fromOffset(700, 450)
-window.Position = UDim2.fromOffset(100, 100)
-window.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-window.BorderSizePixel = 1
-window.BorderColor3 = Color3.fromRGB(80, 80, 80)
-window.Parent = gui
+local panel = Instance.new("Frame")
+panel.Name = "Panel"
+panel.Size = UDim2.fromOffset(500, 185)
+panel.Position = UDim2.new(0.5, -250, 1, -215)
+panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+panel.BorderSizePixel = 0
+panel.Visible = false
+panel.Active = true
+panel.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = panel
 
 --------------------------------------------------
--- TITLE BAR
+-- TITLE
 --------------------------------------------------
-
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 32)
-titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-titleBar.BorderSizePixel = 0
-titleBar.Parent = window
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -10, 1, 0)
-title.Position = UDim2.fromOffset(10, 0)
+title.Size = UDim2.new(1, -20, 0, 25)
+title.Position = UDim2.fromOffset(10, 8)
 title.BackgroundTransparency = 1
-title.Text = "Workspace Explorer"
-title.TextColor3 = Color3.fromRGB(235, 235, 235)
-title.TextSize = 16
-title.Font = Enum.Font.SourceSans
+title.Text = "Object Inspector"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 18
+title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = titleBar
-
---------------------------------------------------
--- EXPLORER
---------------------------------------------------
-
-local explorer = Instance.new("ScrollingFrame")
-explorer.Size = UDim2.new(0, 300, 1, -32)
-explorer.Position = UDim2.fromOffset(0, 32)
-explorer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-explorer.BorderSizePixel = 0
-explorer.ScrollBarThickness = 6
-explorer.CanvasSize = UDim2.fromOffset(0, 0)
-explorer.Parent = window
-
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 1)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Parent = explorer
-
-local padding = Instance.new("UIPadding")
-padding.PaddingTop = UDim.new(0, 5)
-padding.PaddingLeft = UDim.new(0, 5)
-padding.PaddingRight = UDim.new(0, 5)
-padding.Parent = explorer
-
---------------------------------------------------
--- CODE VIEWER
---------------------------------------------------
-
-local viewer = Instance.new("ScrollingFrame")
-viewer.Size = UDim2.new(1, -300, 1, -32)
-viewer.Position = UDim2.fromOffset(300, 32)
-viewer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-viewer.BorderSizePixel = 0
-viewer.ScrollBarThickness = 6
-viewer.CanvasSize = UDim2.fromOffset(0, 0)
-viewer.Parent = window
-
-local viewerText = Instance.new("TextBox")
-
-viewerText.Size = UDim2.new(1, -20, 0, 0)
-viewerText.Position = UDim2.fromOffset(10, 10)
-viewerText.AutomaticSize = Enum.AutomaticSize.Y
-
-viewerText.BackgroundTransparency = 1
-
-viewerText.Text = "-- Select an object"
-
-viewerText.TextColor3 = Color3.fromRGB(210, 210, 210)
-viewerText.TextSize = 14
-viewerText.Font = Enum.Font.Code
-
-viewerText.TextXAlignment = Enum.TextXAlignment.Left
-viewerText.TextYAlignment = Enum.TextYAlignment.Top
-
-viewerText.TextWrapped = false
-
-viewerText.ClearTextOnFocus = false
-viewerText.MultiLine = true
-
-viewerText.Parent = viewer
-
---------------------------------------------------
--- UPDATE VIEWER SIZE
---------------------------------------------------
-
-local function updateViewer()
-
-    task.wait()
-
-    viewer.CanvasSize = UDim2.new(
-        0,
-        0,
-        0,
-        viewerText.AbsoluteSize.Y + 20
-    )
-
-end
-
---------------------------------------------------
--- TREE DATA
---------------------------------------------------
-
-local nodes = {}
-
---------------------------------------------------
--- UPDATE TREE VISIBILITY
---------------------------------------------------
-
-local function updateTree()
-
-    for _, node in ipairs(nodes) do
-
-        local visible = true
-
-        for _, parentNode in ipairs(node.Parents) do
-
-            if not parentNode.Expanded then
-                visible = false
-                break
-            end
-
-        end
-
-        node.Row.Visible = visible
-
-        --------------------------------------------------
-        -- UPDATE ARROW
-        --------------------------------------------------
-
-        if node.HasChildren then
-
-            local indent = string.rep("    ", node.Depth)
-
-            if node.Expanded then
-
-                node.Row.Text =
-                    indent ..
-                    "▼ " ..
-                    node.Object.Name ..
-                    " [" ..
-                    node.Object.ClassName ..
-                    "]"
-
-            else
-
-                node.Row.Text =
-                    indent ..
-                    "▶ " ..
-                    node.Object.Name ..
-                    " [" ..
-                    node.Object.ClassName ..
-                    "]"
-
-            end
-
-        end
-
-    end
-
-    task.wait()
-
-    explorer.CanvasSize = UDim2.new(
-        0,
-        0,
-        0,
-        layout.AbsoluteContentSize.Y + 10
-    )
-
-end
-
---------------------------------------------------
--- CREATE NODE
---------------------------------------------------
-
-local createNode
-
-createNode = function(object, depth, parents)
-
-    local children = object:GetChildren()
-    local hasChildren = #children > 0
-
-    --------------------------------------------------
-    -- CREATE ROW
-    --------------------------------------------------
-
-    local row = Instance.new("TextButton")
-
-    row.Size = UDim2.new(1, -10, 0, 26)
-
-    row.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    row.BorderSizePixel = 0
-
-    row.TextColor3 = Color3.fromRGB(230, 230, 230)
-    row.TextSize = 14
-    row.Font = Enum.Font.SourceSans
-    row.TextXAlignment = Enum.TextXAlignment.Left
-
-    row.LayoutOrder = #nodes + 1
-
-    --------------------------------------------------
-    -- NODE DATA
-    --------------------------------------------------
-
-    local node = {
-        Object = object,
-        Row = row,
-        Depth = depth,
-        Parents = parents,
-        Children = {},
-        HasChildren = hasChildren,
-        Expanded = false
-    }
-
-    table.insert(nodes, node)
-
-    --------------------------------------------------
-    -- INITIAL TEXT
-    --------------------------------------------------
-
-    local indent = string.rep("    ", depth)
-
-    if hasChildren then
-
-        row.Text =
-            indent ..
-            "▶ " ..
-            object.Name ..
-            " [" ..
-            object.ClassName ..
-            "]"
-
-    else
-
-        row.Text =
-            indent ..
-            "   " ..
-            object.Name ..
-            " [" ..
-            object.ClassName ..
-            "]"
-
-    end
-
-    row.Parent = explorer
-
-    --------------------------------------------------
-    -- CLICK
-    --------------------------------------------------
-
-    row.MouseButton1Click:Connect(function()
-
-        --------------------------------------------------
-        -- SCRIPT SOURCE
-        --------------------------------------------------
-
-        if scripts
-            and scripts.IsScript
-            and scripts.IsScript(object) then
-
-            local source = scripts.GetSource(object)
-
-            viewerText.Text = source
-
-            print(
-                "Loaded script:",
-                object:GetFullName(),
-                "Characters:",
-                #source
-            )
-
-        --------------------------------------------------
-        -- NORMAL OBJECT
-        --------------------------------------------------
-
-        else
-
-            viewerText.Text =
-                "Name: " .. object.Name ..
-                "\nClass: " .. object.ClassName ..
-                "\nChildren: " .. tostring(#object:GetChildren())
-
-        end
-
-        --------------------------------------------------
-        -- UPDATE VIEWER
-        --------------------------------------------------
-
-        updateViewer()
-
-        --------------------------------------------------
-        -- TOGGLE TREE
-        --------------------------------------------------
-
-        if node.HasChildren then
-
-            node.Expanded = not node.Expanded
-
-            updateTree()
-
-        end
-
-    end)
-
-    --------------------------------------------------
-    -- CREATE CHILDREN
-    --------------------------------------------------
-
-    local childParents = {}
-
-    for _, parent in ipairs(parents) do
-        table.insert(childParents, parent)
-    end
-
-    table.insert(childParents, node)
-
-    for _, child in ipairs(children) do
-
-        local childNode = createNode(
-            child,
-            depth + 1,
-            childParents
-        )
-
-        table.insert(node.Children, childNode)
-
-    end
-
-    return node
-
-end
-
---------------------------------------------------
--- BUILD WORKSPACE TREE
---------------------------------------------------
-
-print("Building Workspace Explorer...")
-
-for _, object in ipairs(workspace:GetChildren()) do
-
-    createNode(
-        object,
-        0,
-        {}
-    )
-
-end
-
---------------------------------------------------
--- INITIAL STATE
---------------------------------------------------
-
-updateTree()
-
-print("Explorer objects:", #nodes)
+title.Active = true
+title.Parent = panel
 
 --------------------------------------------------
 -- DRAGGING
 --------------------------------------------------
 
 local dragging = false
-local dragStart
-local startPosition
+local dragStart = nil
+local startPosition = nil
 
-titleBar.InputBegan:Connect(function(input)
+title.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
 
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPosition = panel.Position
 
-        dragging = true
-        dragStart = input.Position
-        startPosition = window.Position
-
-    end
-
-end)
-
-titleBar.InputEnded:Connect(function(input)
-
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-        dragging = false
-
-    end
-
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
+	if not dragging then
+		return
+	end
 
-    if dragging
-        and input.UserInputType == Enum.UserInputType.MouseMovement then
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
 
-        local delta = input.Position - dragStart
+	local delta = input.Position - dragStart
 
-        window.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-
-    end
-
+	panel.Position = UDim2.new(
+		startPosition.X.Scale,
+		startPosition.X.Offset + delta.X,
+		startPosition.Y.Scale,
+		startPosition.Y.Offset + delta.Y
+	)
 end)
 
-print("Explorer loaded successfully.")
+--------------------------------------------------
+-- IDENTIFIER BOX
+--------------------------------------------------
+
+local pathBox = Instance.new("TextBox")
+pathBox.Size = UDim2.new(1, -20, 0, 42)
+pathBox.Position = UDim2.fromOffset(10, 40)
+pathBox.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+pathBox.BorderSizePixel = 0
+pathBox.Text = ""
+pathBox.PlaceholderText = "No object selected"
+pathBox.TextColor3 = Color3.fromRGB(220, 220, 225)
+pathBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 125)
+pathBox.TextSize = 14
+pathBox.Font = Enum.Font.Code
+pathBox.ClearTextOnFocus = false
+pathBox.TextEditable = true
+pathBox.TextXAlignment = Enum.TextXAlignment.Left
+pathBox.TextYAlignment = Enum.TextYAlignment.Center
+pathBox.Parent = panel
+
+local pathCorner = Instance.new("UICorner")
+pathCorner.CornerRadius = UDim.new(0, 6)
+pathCorner.Parent = pathBox
+
+--------------------------------------------------
+-- TOGGLE
+--------------------------------------------------
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.fromOffset(145, 35)
+toggle.Position = UDim2.fromOffset(10, 95)
+toggle.BorderSizePixel = 0
+toggle.TextSize = 14
+toggle.Font = Enum.Font.GothamBold
+toggle.Parent = panel
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 7)
+toggleCorner.Parent = toggle
+
+--------------------------------------------------
+-- HIGHLIGHT BUTTON
+--------------------------------------------------
+
+local highlightButton = Instance.new("TextButton")
+highlightButton.Size = UDim2.fromOffset(145, 35)
+highlightButton.Position = UDim2.fromOffset(165, 95)
+highlightButton.BorderSizePixel = 0
+highlightButton.TextSize = 14
+highlightButton.Font = Enum.Font.GothamBold
+highlightButton.Parent = panel
+
+local highlightCorner = Instance.new("UICorner")
+highlightCorner.CornerRadius = UDim.new(0, 7)
+highlightCorner.Parent = highlightButton
+
+--------------------------------------------------
+-- CLOSE BUTTON
+--------------------------------------------------
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.fromOffset(120, 35)
+closeButton.Position = UDim2.fromOffset(320, 95)
+closeButton.BackgroundColor3 = Color3.fromRGB(150, 55, 55)
+closeButton.BorderSizePixel = 0
+closeButton.Text = "CLOSE"
+closeButton.TextColor3 = Color3.new(1, 1, 1)
+closeButton.TextSize = 14
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Parent = panel
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 7)
+closeCorner.Parent = closeButton
+
+--------------------------------------------------
+-- STATUS
+--------------------------------------------------
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -20, 0, 25)
+status.Position = UDim2.fromOffset(10, 145)
+status.BackgroundTransparency = 1
+status.Text = "Highlight: OFF"
+status.TextColor3 = Color3.fromRGB(160, 160, 170)
+status.TextSize = 13
+status.Font = Enum.Font.Gotham
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Parent = panel
+
+--------------------------------------------------
+-- HIGHLIGHT
+--------------------------------------------------
+
+local highlight = Instance.new("Highlight")
+highlight.Name = "InspectorHighlight"
+highlight.FillColor = Color3.fromRGB(255, 220, 50)
+highlight.FillTransparency = 0.65
+highlight.OutlineColor = Color3.fromRGB(255, 235, 100)
+highlight.OutlineTransparency = 0
+highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+highlight.Enabled = false
+highlight.Parent = workspace
+
+--------------------------------------------------
+-- TRANSPARENT PART MARKER
+--------------------------------------------------
+
+local marker = nil
+
+local function destroyMarker()
+	if marker then
+		marker:Destroy()
+		marker = nil
+	end
+end
+
+local function createMarker(part)
+	destroyMarker()
+
+	if not part:IsA("BasePart") then
+		return
+	end
+
+	marker = Instance.new("Part")
+	marker.Name = "InspectorTransparentMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.CanTouch = false
+	marker.CanQuery = false
+	marker.CastShadow = false
+	marker.Material = Enum.Material.Neon
+	marker.Color = Color3.fromRGB(255, 220, 50)
+	marker.Transparency = 0.75
+	marker.CFrame = part.CFrame
+	marker.Size = part.Size
+	marker.Parent = workspace
+end
+
+--------------------------------------------------
+-- KEEP TRANSPARENT MARKER UPDATED
+--------------------------------------------------
+
+RunService.RenderStepped:Connect(function()
+	if not marker then
+		return
+	end
+
+	if not selectedObject then
+		destroyMarker()
+		return
+	end
+
+	if not selectedObject.Parent then
+		destroyMarker()
+
+		highlight.Enabled = false
+		highlight.Adornee = nil
+
+		selectedObject = nil
+		panel.Visible = false
+
+		return
+	end
+
+	if not selectedObject:IsA("BasePart") then
+		destroyMarker()
+		return
+	end
+
+	marker.CFrame = selectedObject.CFrame
+	marker.Size = selectedObject.Size
+end)
+
+--------------------------------------------------
+-- STRUCTURAL PATH
+--------------------------------------------------
+
+local function getPath(instance)
+	local parts = {}
+
+	while instance and instance ~= game do
+		table.insert(parts, 1, instance.Name)
+		instance = instance.Parent
+	end
+
+	return "game." .. table.concat(parts, ".")
+end
+
+--------------------------------------------------
+-- STRUCTURAL UNIQUE ID
+--------------------------------------------------
+
+local function getUniqueID(instance)
+	local numbers = {}
+	local current = instance
+
+	while current and current ~= game do
+		local parent = current.Parent
+
+		if not parent then
+			break
+		end
+
+		local index = 0
+
+		for i, child in ipairs(parent:GetChildren()) do
+			if child == current then
+				index = i
+				break
+			end
+		end
+
+		table.insert(numbers, 1, tostring(index))
+
+		current = parent
+	end
+
+	return table.concat(numbers, ".")
+end
+
+--------------------------------------------------
+-- FINAL IDENTIFIER
+--------------------------------------------------
+
+local function getIdentifier(instance)
+	local path = getPath(instance)
+	local uniqueID = getUniqueID(instance)
+
+	return "pathstring:[" .. path .. "]uniqueIDstring[" .. uniqueID .. "]"
+end
+
+--------------------------------------------------
+-- HIGHLIGHT UPDATE
+--------------------------------------------------
+
+local function updateHighlight()
+	highlight.Enabled = false
+	highlight.Adornee = nil
+
+	destroyMarker()
+
+	if not selectedObject then
+		status.Text = "Highlight: OFF"
+		return
+	end
+
+	if not highlightEnabled then
+		status.Text = "Highlight: OFF"
+		return
+	end
+
+	status.Text = "Highlight: ON"
+
+	if selectedObject:IsA("BasePart") then
+
+		if selectedObject.Transparency > 0 then
+			createMarker(selectedObject)
+		else
+			highlight.Adornee = selectedObject
+			highlight.Enabled = true
+		end
+
+		return
+	end
+
+	highlight.Adornee = selectedObject
+	highlight.Enabled = true
+end
+
+--------------------------------------------------
+-- BUTTON STATES
+--------------------------------------------------
+
+local function updateToggle()
+	if inspecting then
+		toggle.Text = "INSPECTING: ON"
+		toggle.BackgroundColor3 = Color3.fromRGB(55, 150, 80)
+	else
+		toggle.Text = "INSPECTING: OFF"
+		toggle.BackgroundColor3 = Color3.fromRGB(100, 100, 105)
+	end
+end
+
+local function updateHighlightButton()
+	if highlightEnabled then
+		highlightButton.Text = "HIGHLIGHT: ON"
+		highlightButton.BackgroundColor3 = Color3.fromRGB(55, 150, 80)
+	else
+		highlightButton.Text = "HIGHLIGHT: OFF"
+		highlightButton.BackgroundColor3 = Color3.fromRGB(100, 100, 105)
+	end
+
+	updateHighlight()
+end
+
+updateToggle()
+updateHighlightButton()
+
+--------------------------------------------------
+-- SELECT OBJECT
+--------------------------------------------------
+
+local function selectObject(object)
+	if not object then
+		return
+	end
+
+	selectedObject = object
+
+	title.Text = object.Name
+
+	-- NEW STRUCTURAL IDENTIFIER
+	pathBox.Text = getIdentifier(object)
+
+	panel.Visible = true
+
+	updateHighlight()
+end
+
+--------------------------------------------------
+-- CLICK INSPECTION
+--------------------------------------------------
+
+mouse.Button1Down:Connect(function()
+	if not inspecting then
+		return
+	end
+
+	local target = mouse.Target
+
+	if not target then
+		return
+	end
+
+	selectObject(target)
+end)
+
+--------------------------------------------------
+-- INSPECT TOGGLE
+--------------------------------------------------
+
+toggle.MouseButton1Click:Connect(function()
+	inspecting = not inspecting
+	updateToggle()
+end)
+
+--------------------------------------------------
+-- HIGHLIGHT TOGGLE
+--------------------------------------------------
+
+highlightButton.MouseButton1Click:Connect(function()
+	highlightEnabled = not highlightEnabled
+	updateHighlightButton()
+end)
+
+--------------------------------------------------
+-- CLOSE
+--------------------------------------------------
+
+closeButton.MouseButton1Click:Connect(function()
+	panel.Visible = false
+
+	highlight.Enabled = false
+	highlight.Adornee = nil
+
+	destroyMarker()
+
+	selectedObject = nil
+end)
